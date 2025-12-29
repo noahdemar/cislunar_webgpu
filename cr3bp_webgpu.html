@@ -1,0 +1,891 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cislunar Orbit Explorer</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #ui { position: absolute; top: 20px; left: 20px; width: 300px; background: rgba(0,0,0,0.7); backdrop-filter: blur(10px); border-radius: 12px; padding: 16px; font-size: 12px; max-height: calc(100vh - 40px); overflow-y: auto; }
+        h1 { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: #fff; }
+        .subtitle { font-size: 10px; color: #666; margin-bottom: 16px; }
+        .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+        .preset-btn { background: rgba(255,255,255,0.1); border: none; color: #aaa; padding: 6px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+        .preset-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+        .preset-btn.active { background: #0a84ff; color: #fff; }
+        .solve-btn { width: 100%; background: linear-gradient(135deg, #00c853, #00897b); border: none; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; margin-bottom: 12px; }
+        .solve-btn:hover { background: linear-gradient(135deg, #00e676, #00acc1); transform: translateY(-1px); }
+        .solve-btn:disabled { background: rgba(255,255,255,0.1); cursor: not-allowed; transform: none; }
+        .solve-status { font-size: 10px; color: #888; margin-bottom: 12px; min-height: 14px; }
+        .solve-status.success { color: #00c853; }
+        .solve-status.error { color: #ff5252; }
+        .solve-status.working { color: #ffab00; }
+        .control { margin-bottom: 10px; }
+        .control-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .control label { color: #888; font-size: 11px; }
+        .control .unit { color: #555; font-size: 10px; }
+        .input-row { display: flex; gap: 8px; align-items: center; }
+        .input-row input[type=range] { flex: 1; }
+        .input-row input[type=number] { width: 80px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; padding: 4px 6px; font-size: 11px; font-family: inherit; }
+        .input-row input[type=number]:focus { outline: none; border-color: #0a84ff; }
+        input[type=range] { height: 4px; -webkit-appearance: none; background: rgba(255,255,255,0.2); border-radius: 2px; outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #fff; border-radius: 50%; cursor: pointer; }
+        .section-title { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px 0; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .hint { color: #555; font-size: 10px; margin-top: 12px; line-height: 1.5; }
+        #error { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1a1a1a; padding: 24px; border-radius: 12px; text-align: center; }
+        .units-note { font-size: 9px; color: #444; margin-top: 8px; line-height: 1.4; }
+        .jacobi-display { font-size: 10px; color: #888; margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; }
+        .jacobi-display span { color: #0a84ff; font-family: monospace; }
+        .gradient-legend { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 9px; color: #666; }
+        .gradient-bar { height: 8px; flex: 1; border-radius: 4px; background: linear-gradient(to right, #00ffff, #00ff00, #ffff00, #ff8800, #ff0088); }
+        .btn-row { display: flex; gap: 8px; margin-bottom: 12px; }
+        .family-btn { flex: 1; background: linear-gradient(135deg, #ff6d00, #ff9100); border: none; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+        .family-btn:hover { background: linear-gradient(135deg, #ff9100, #ffab00); transform: translateY(-1px); }
+        .family-btn:disabled { background: rgba(255,255,255,0.1); cursor: not-allowed; transform: none; }
+        .family-controls { background: rgba(255,150,0,0.1); border: 1px solid rgba(255,150,0,0.3); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        .family-controls .section-title { margin-top: 0; padding-top: 0; border-top: none; color: #ff9100; }
+        .family-info { font-size: 10px; color: #888; margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; }
+        .family-info span { color: #ff9100; font-family: monospace; }
+        .orbit-list { max-height: 120px; overflow-y: auto; margin-top: 8px; }
+        .orbit-item { display: flex; align-items: center; padding: 4px 8px; font-size: 10px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+        .orbit-item:hover { background: rgba(255,255,255,0.1); }
+        .orbit-item.selected { background: rgba(255,150,0,0.3); }
+        .orbit-color { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
+        .clear-btn { background: rgba(255,80,80,0.2); border: 1px solid rgba(255,80,80,0.4); color: #ff5050; padding: 6px 12px; border-radius: 6px; font-size: 10px; cursor: pointer; margin-top: 8px; width: 100%; }
+        .clear-btn:hover { background: rgba(255,80,80,0.3); }
+        .collapsible-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 8px 0; margin-bottom: 8px; user-select: none; transition: all 0.15s; }
+        .collapsible-header:hover { color: #ff9100; }
+        .collapsible-header .section-title { margin: 0; padding: 0; border: none; }
+        .collapsible-arrow { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid #ff9100; transition: transform 0.15s; }
+        .collapsible-arrow.collapsed { transform: rotate(180deg); }
+        .collapsible-content { transition: max-height 0.15s ease-out, opacity 0.15s ease-out; overflow: hidden; }
+        .collapsible-content.collapsed { max-height: 0; opacity: 0; }
+    </style>
+</head>
+<body>
+<div id="error">WebGPU not supported</div>
+<div id="ui">
+    <h1>Cislunar Orbit Designer</h1>
+    <div class="subtitle">CR3BP Earth-Moon System</div>
+    <div class="presets">
+        <button class="preset-btn" data-preset="halo_l1">L1 Halo</button>
+        <button class="preset-btn" data-preset="halo_l2">L2 Halo</button>
+        <button class="preset-btn active" data-preset="dro">DRO</button>
+        <!--<button class="preset-btn" data-preset="lyapunov">Lyapunov</button>-->
+        <button class="preset-btn" data-preset="butterfly">Butterfly</button>
+    </div>
+    <div class="btn-row">
+        <button class="solve-btn" id="solve-btn">Solve Single</button>
+    </div>
+    <div class="solve-status" id="solve-status"></div>
+    <div class="family-controls">
+        <div class="collapsible-header" id="manifold-header">
+            <div class="section-title">Stable Manifold Solver (WIP)</div>
+            <div class="collapsible-arrow" id="manifold-arrow"></div>
+        </div>
+        <div class="collapsible-content" id="manifold-content">
+        <div class="btn-row">
+            <button class="family-btn" id="family-btn">Compute Family</button>
+        </div>
+        <div class="control">
+            <div class="control-header"><label>Number of Members</label></div>
+            <div class="input-row">
+                <input type="range" id="slider-numOrbits" min="3" max="40" step="1" value="12">
+                <input type="number" id="input-numOrbits" value="12" min="3" max="60">
+            </div>
+        </div>
+        <div class="control">
+            <div class="control-header"><label>Step Size</label><span class="unit">(Δx)</span></div>
+            <div class="input-row">
+                <input type="range" id="slider-stepSize" min="0.005" max="0.08" step="0.001" value="0.02">
+                <input type="number" id="input-stepSize" value="0.02" step="0.001">
+            </div>
+        </div>
+        <div class="control">
+            <div class="control-header"><label>Direction</label></div>
+            <div class="input-row">
+                <button class="preset-btn" id="dir-minus" style="flex:1">← Decrease x</button>
+                <button class="preset-btn active" id="dir-plus" style="flex:1">Increase x →</button>
+            </div>
+        </div>
+        <div class="family-info">
+            Members: <span id="family-count">0</span> | Jacobi: <span id="jacobi-range">--</span>
+        </div>
+        <div class="orbit-list" id="orbit-list"></div>
+        <button class="clear-btn" id="clear-btn">Clear Family</button>
+        </div>
+    </div>
+    <div class="section-title">Initial Position</div>
+    <div class="control"><div class="control-header"><label>X</label><span class="unit">DU (1 DU = 384,400 km)</span></div><div class="input-row"><input type="range" id="slider-x" min="-1.5" max="1.5" step="0.0001"><input type="number" id="input-x" step="0.0001"></div></div>
+    <div class="control"><div class="control-header"><label>Y</label><span class="unit">DU</span></div><div class="input-row"><input type="range" id="slider-y" min="-1.5" max="1.5" step="0.0001"><input type="number" id="input-y" step="0.0001"></div></div>
+    <div class="control"><div class="control-header"><label>Z</label><span class="unit">DU</span></div><div class="input-row"><input type="range" id="slider-z" min="-0.5" max="0.5" step="0.0001"><input type="number" id="input-z" step="0.0001"></div></div>
+    <div class="section-title">Initial Velocity</div>
+    <div class="control"><div class="control-header"><label>Vx</label><span class="unit">DU/TU (1 DU/TU ≈ 1.02 km/s)</span></div><div class="input-row"><input type="range" id="slider-vx" min="-2" max="2" step="0.0001"><input type="number" id="input-vx" step="0.0001"></div></div>
+    <div class="control"><div class="control-header"><label>Vy</label><span class="unit">DU/TU</span></div><div class="input-row"><input type="range" id="slider-vy" min="-2" max="2" step="0.0001"><input type="number" id="input-vy" step="0.0001"></div></div>
+    <div class="control"><div class="control-header"><label>Vz</label><span class="unit">DU/TU</span></div><div class="input-row"><input type="range" id="slider-vz" min="-1" max="1" step="0.0001"><input type="number" id="input-vz" step="0.0001"></div></div>
+    <div class="section-title">Integration</div>
+    <div class="control"><div class="control-header"><label>Duration</label><span class="unit">TU (1 TU ≈ 4.34 days)</span></div><div class="input-row"><input type="range" id="slider-t" min="1" max="100" step="0.5"><input type="number" id="input-t" step="0.5"></div></div>
+    <div class="jacobi-display">Jacobi Constant: <span id="jacobi-value">--</span></div>
+    <div class="gradient-legend"><span>t=0</span><div class="gradient-bar"></div><span>t=T</span></div>
+    <div class="hint">Drag to rotate · Scroll to zoom<br><span style="color:#ff69b4">◯</span> Earth · <span style="color:#90EE90">◯</span> Moon</div>
+    <div class="units-note">L1 ≈ 0.8369 · L2 ≈ 1.1557 · Moon center = 1-μ ≈ 0.988</div>
+    <div style="font-size: 8px; color: #444; margin-top: 16px; text-align: center; line-height: 1.3;">
+        Created by Noah Demar all rights reserved<br>
+        Please contact noahdemar2021@u.northwestern.edu to request permission to use this code
+    </div>
+</div>
+<canvas id="canvas"></canvas>
+
+<script id="wgsl-compute" type="x-shader/x-wgsl">
+struct Params { pos: vec4<f32>, vel: vec4<f32>, mu: f32, total_time: f32, num_points: f32, padding: f32, };
+@group(0) @binding(0) var<uniform> params: Params;
+@group(0) @binding(1) var<storage, read_write> points: array<vec4<f32>>;
+fn get_accel(p: vec3<f32>, mu: f32) -> vec3<f32> {
+    let r1 = sqrt((p.x + mu)*(p.x + mu) + p.y*p.y + p.z*p.z);
+    let r2 = sqrt((p.x - 1.0 + mu)*(p.x - 1.0 + mu) + p.y*p.y + p.z*p.z);
+    let t1 = (1.0 - mu) / (r1*r1*r1); let t2 = mu / (r2*r2*r2);
+    return vec3<f32>(p.x - t1*(p.x + mu) - t2*(p.x - 1.0 + mu), p.y - t1*p.y - t2*p.y, -t1*p.z - t2*p.z);
+}
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.x;
+    let count = u32(params.num_points);
+    if (idx >= count) { return; }
+    let dt = params.total_time / params.num_points;
+    var r = params.pos.xyz; var v = params.vel.xyz; let mu = params.mu;
+    let moonX = 1.0 - mu;
+    let moonR = params.padding;
+    let moonR2 = moonR * moonR;
+    for (var i = 0u; i < idx; i++) {
+        let k1v = get_accel(r, mu) + vec3<f32>(2.0*v.y, -2.0*v.x, 0.0); let k1r = v;
+        let r2 = r + k1r * dt * 0.5; let v2 = v + k1v * dt * 0.5;
+        let k2v = get_accel(r2, mu) + vec3<f32>(2.0*v2.y, -2.0*v2.x, 0.0); let k2r = v2;
+        let r3 = r + k2r * dt * 0.5; let v3 = v + k2v * dt * 0.5;
+        let k3v = get_accel(r3, mu) + vec3<f32>(2.0*v3.y, -2.0*v3.x, 0.0); let k3r = v3;
+        let r4 = r + k3r * dt; let v4 = v + k3v * dt;
+        let k4v = get_accel(r4, mu) + vec3<f32>(2.0*v4.y, -2.0*v4.x, 0.0); let k4r = v4;
+        r = r + dt/6.0 * (k1r + 2.0*k2r + 2.0*k3r + k4r);
+        v = v + dt/6.0 * (k1v + 2.0*k2v + 2.0*k3v + k4v);
+
+        let dx = r.x - moonX;
+        let d2 = dx*dx + r.y*r.y + r.z*r.z;
+        if (d2 <= moonR2) {
+            break;
+        }
+    }
+    let t_norm = f32(idx) / f32(count - 1u);
+    points[idx] = vec4<f32>(r, t_norm);
+}
+</script>
+
+<script id="wgsl-line" type="x-shader/x-wgsl">
+struct Uniforms { mvp: mat4x4<f32>, model: mat4x4<f32>, color: vec4<f32> };
+@group(0) @binding(0) var<uniform> u: Uniforms;
+struct VSOut { @builtin(position) pos: vec4<f32>, @location(0) t: f32, };
+fn timeToColor(t: f32) -> vec3<f32> {
+    if (t < 0.25) { return mix(vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(0.0, 1.0, 0.0), t / 0.25); }
+    else if (t < 0.5) { return mix(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 1.0, 0.0), (t - 0.25) / 0.25); }
+    else if (t < 0.75) { return mix(vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(1.0, 0.5, 0.0), (t - 0.5) / 0.25); }
+    else { return mix(vec3<f32>(1.0, 0.5, 0.0), vec3<f32>(1.0, 0.0, 0.5), (t - 0.75) / 0.25); }
+}
+@vertex fn vs(@location(0) pos: vec4<f32>) -> VSOut {
+    var o: VSOut; o.pos = u.mvp * u.model * vec4<f32>(pos.xyz, 1.0); o.t = pos.w; return o;
+}
+@fragment fn fs(i: VSOut) -> @location(0) vec4<f32> { return vec4<f32>(timeToColor(i.t), 1.0); }
+</script>
+
+<script id="wgsl-family-line" type="x-shader/x-wgsl">
+struct Uniforms { mvp: mat4x4<f32>, model: mat4x4<f32>, color: vec4<f32> };
+@group(0) @binding(0) var<uniform> u: Uniforms;
+struct VSOut { @builtin(position) pos: vec4<f32>, @location(0) col: vec4<f32> };
+@vertex fn vs(@location(0) pos: vec4<f32>) -> VSOut {
+    var o: VSOut; o.pos = u.mvp * u.model * vec4<f32>(pos.xyz, 1.0); o.col = u.color; return o;
+}
+@fragment fn fs(i: VSOut) -> @location(0) vec4<f32> { return i.col; }
+</script>
+
+<script id="wgsl-sphere" type="x-shader/x-wgsl">
+struct Uniforms { mvp: mat4x4<f32>, model: mat4x4<f32>, color: vec4<f32>, limbColor: vec4<f32>, eyePos: vec4<f32> };
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var tex: texture_2d<f32>;
+struct VSOut { @builtin(position) pos: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) normal: vec3<f32>, @location(2) viewDir: vec3<f32>, };
+@vertex fn vs(@location(0) pos: vec4<f32>, @location(1) uv: vec2<f32>) -> VSOut {
+    var o: VSOut;
+    o.pos = u.mvp * u.model * pos; o.uv = uv;
+    o.normal = normalize((u.model * vec4<f32>(pos.xyz, 0.0)).xyz);
+    let worldPos = (u.model * pos).xyz;
+    o.viewDir = normalize(u.eyePos.xyz - worldPos);
+    return o;
+}
+@fragment fn fs(i: VSOut) -> @location(0) vec4<f32> {
+    let light = normalize(vec3<f32>(1.0, 1.0, 0.5));
+    let diff = 1.0;
+    let texCol = min(textureSample(tex, samp, i.uv).rgb * 1.35, vec3<f32>(1.0));
+    
+    let fresnel = 1.0 - abs(dot(i.normal, i.viewDir));
+    let outline = smoothstep(0.40, 0.75, fresnel);
+    
+    let col = texCol * diff * (1.0 - outline) + u.limbColor.rgb * outline;
+    return vec4<f32>(col, 1.0);
+}
+</script>
+
+<script type="module">
+import { mat4 } from 'https://wgpu-matrix.org/dist/2.x/wgpu-matrix.module.js';
+const _0x9f56 = 0x04 * 0x2000;
+const _0xfc7e = 0.012150585609624;
+const _0x1848 = -_0xfc7e, MOON_X = 1.0 - _0xfc7e;
+const _0xb44e = 0x18e3 / 0x5dd90, MOON_RADIUS = 0x6c9 / 0x5dd90;
+const _0xfe65 = {
+halo_l1: { x: 0.8234, y: 0x00, z: 0.0400, vx: 0x00, vy: 0.1300, vz: 0x00, t: 2.75, type: '\x68\x61\x6c\x6f' },
+halo_l2: { x: 1.1809, y: 0x00, z: 0.0200, vx: 0x00, vy: -0.1559, vz: 0x00, t: 3.4, type: '\x68\x61\x6c\x6f' },
+dro: { x: 1.10, y: 0x00, z: 0x00, vx: 0x00, vy: -0.76, vz: 0x00, t: 3.0, type: 'dro' },
+butterfly: { x: 1.0406, y: 0x00, z: 0.1500, vx: 0x00, vy: -0.0800, vz: 0x00, t: 0x0b, type: '\x62\x75\x74\x74\x65\x72\x66\x6c\x79' },
+};
+const _0x21b4 = { ..._0xfe65.dro };
+const _0x2294 = { numOrbits: 0x0c, stepSize: 0.02, direction: 0x01 };
+let _0x34a8 = [];
+let _0xed66 = [];
+let device, context, canvas, depthTex, computePipeline, linePipeline, familyLinePipeline, spherePipeline;
+let _0x17c7, pointBuf, orbitUniformBuf, earthUniformBuf, moonUniformBuf;
+let _0x8c60, orbitBG, earthBG, moonBG, earthGeo, moonGeo;
+let _0x84a7 = 0.8, camElev = 1.2, camZoom = 2.5, needsRender = true;
+function _0xb673(_0x21b4, mu) {
+const [_0x5f67, _0x68ef, z, vx, vy, vz] = _0x21b4;
+const _0xa2f4 = Math.sqrt((_0x5f67 + mu)**0x02 + _0x68ef*_0x68ef + z*z);
+const _0x2085 = Math.sqrt((_0x5f67 - 0x01 + mu)**0x02 + _0x68ef*_0x68ef + z*z);
+if (_0xa2f4 < 1e-10 || _0x2085 < 1e-10) return [vx, vy, vz, 0x00, 0x00, 0x00];
+const _0xc1d3 = _0xa2f4**0x03;
+const _0xe130 = _0x2085**0x03;
+const _0xd53f = _0x5f67 + 0x02*vy - (0x01-mu)*(_0x5f67 + mu)/_0xc1d3 - mu*(_0x5f67 - 0x01 + mu)/_0xe130;
+const _0xae59 = _0x68ef - 0x02*vx - (0x01-mu)*_0x68ef/_0xc1d3 - mu*_0x68ef/_0xe130;
+const _0xe889 = -(0x01-mu)*z/_0xc1d3 - mu*z/_0xe130;
+return [vx, vy, vz, _0xd53f, _0xae59, _0xe889];
+}
+function _0x8df6(_0x21b4, mu) {
+const [_0x5f67, _0x68ef, z] = _0x21b4;
+const _0x6ac3 = (_0x5f67 + mu)**0x02 + _0x68ef*_0x68ef + z*z;
+const _0xe8d3 = (_0x5f67 - 0x01 + mu)**0x02 + _0x68ef*_0x68ef + z*z;
+const _0xa2f4 = Math.sqrt(_0x6ac3);
+const _0x2085 = Math.sqrt(_0xe8d3);
+if (_0xa2f4 < 1e-10 || _0x2085 < 1e-10) return null;
+const _0xc1d3 = _0x6ac3 * _0xa2f4;
+const _0xfd67 = _0xc1d3 * _0x6ac3;
+const _0xe130 = _0xe8d3 * _0x2085;
+const _0x4c14 = _0xe130 * _0xe8d3;
+const _0xce08 = 0x01 - mu;
+const _0x92ab = _0x5f67 + mu;
+const _0x3fa0 = _0x5f67 - 0x01 + mu;
+const _0x4e45 = 0x01 - _0xce08/_0xc1d3 - mu/_0xe130 + 0x03*_0xce08*_0x92ab*_0x92ab/_0xfd67 + 0x03*mu*_0x3fa0*_0x3fa0/_0x4c14;
+const _0xd042 = 0x01 - _0xce08/_0xc1d3 - mu/_0xe130 + 0x03*_0xce08*_0x68ef*_0x68ef/_0xfd67 + 0x03*mu*_0x68ef*_0x68ef/_0x4c14;
+const _0xe277 = -_0xce08/_0xc1d3 - mu/_0xe130 + 0x03*_0xce08*z*z/_0xfd67 + 0x03*mu*z*z/_0x4c14;
+const _0xa777 = 0x03*_0xce08*_0x92ab*_0x68ef/_0xfd67 + 0x03*mu*_0x3fa0*_0x68ef/_0x4c14;
+const _0x23f2 = 0x03*_0xce08*_0x92ab*z/_0xfd67 + 0x03*mu*_0x3fa0*z/_0x4c14;
+const _0xb335 = 0x03*_0xce08*_0x68ef*z/_0xfd67 + 0x03*mu*_0x68ef*z/_0x4c14;
+return [
+0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+_0x4e45, _0xa777, _0x23f2, 0x00, 0x02, 0x00,
+_0xa777, _0xd042, _0xb335, -0x02, 0x00, 0x00,
+_0x23f2, _0xb335, _0xe277, 0x00, 0x00, 0x00,
+];
+}
+function _0x9c7e(_0x21b4, _0x8539, mu) {
+const _0x1e73 = _0xb673(_0x21b4, mu);
+const _0x8b39 = _0x21b4.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * 0.2 * _0x1e73[_0x51a9]);
+const _0x585c = _0xb673(_0x8b39, mu);
+const _0x82a9 = _0x21b4.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x03/0x28 * _0x1e73[_0x51a9] + 0x09/0x28 * _0x585c[_0x51a9]));
+const _0x4b52 = _0xb673(_0x82a9, mu);
+const _0x3104 = _0x21b4.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x2c/0x2d * _0x1e73[_0x51a9] - 0x38/0x0f * _0x585c[_0x51a9] + 0x20/0x09 * _0x4b52[_0x51a9]));
+const _0xc458 = _0xb673(_0x3104, mu);
+const _0xd033 = _0x21b4.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x4bac/0x19a1 * _0x1e73[_0x51a9] - 0x6310/0x88b * _0x585c[_0x51a9] + 0xfbc0/0x19a1 * _0x4b52[_0x51a9] - 0xd4/0x2d9 * _0xc458[_0x51a9]));
+const _0xd91d = _0xb673(_0xd033, mu);
+const _0xbe2d = _0x21b4.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x2339/0xc60 * _0x1e73[_0x51a9] - 0x163/0x21 * _0x585c[_0x51a9] + 0xb68c/0x147f * _0x4b52[_0x51a9] + 0x31/0xb0 * _0xc458[_0x51a9] - 0x13ef/0x48e0 * _0xd91d[_0x51a9]));
+const _0xa82a = _0xb673(_0xbe2d, mu);
+const _0x45b3 = _0x21b4.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x23/0x180 * _0x1e73[_0x51a9] + 0x1f4/0x459 * _0x4b52[_0x51a9] + 0x7d/0xc0 * _0xc458[_0x51a9] - 0x88b/0x1a80 * _0xd91d[_0x51a9] + 0x0b/0x54 * _0xa82a[_0x51a9]));
+const _0x9989 = _0xb673(_0x45b3, mu);
+const _0x8d13 = _0x21b4.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x143b/0xe100 * _0x1e73[_0x51a9] + 0x1d93/0x4137 * _0x4b52[_0x51a9] + 0x189/0x280 * _0xc458[_0x51a9] - 0x167c1/0x52d00 * _0xd91d[_0x51a9] + 0xbb/0x834 * _0xa82a[_0x51a9] + 0x01/0x28 * _0x9989[_0x51a9]));
+const _0x8e5e = Math.sqrt(_0x45b3.reduce((_0xed0d, v, _0x51a9) => _0xed0d + (v - _0x8d13[_0x51a9])**0x02, 0x00) / 0x06);
+return { state: _0x45b3, error: _0x8e5e };
+}
+function _0x4d31(_0x68ef, _0x8539, _0x188b) {
+const _0x1e73 = _0x188b(_0x68ef);
+const _0x8b39 = _0x68ef.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * 0.2 * _0x1e73[_0x51a9]);
+const _0x585c = _0x188b(_0x8b39);
+const _0x82a9 = _0x68ef.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x03/0x28 * _0x1e73[_0x51a9] + 0x09/0x28 * _0x585c[_0x51a9]));
+const _0x4b52 = _0x188b(_0x82a9);
+const _0x3104 = _0x68ef.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x2c/0x2d * _0x1e73[_0x51a9] - 0x38/0x0f * _0x585c[_0x51a9] + 0x20/0x09 * _0x4b52[_0x51a9]));
+const _0xc458 = _0x188b(_0x3104);
+const _0xd033 = _0x68ef.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x4bac/0x19a1 * _0x1e73[_0x51a9] - 0x6310/0x88b * _0x585c[_0x51a9] + 0xfbc0/0x19a1 * _0x4b52[_0x51a9] - 0xd4/0x2d9 * _0xc458[_0x51a9]));
+const _0xd91d = _0x188b(_0xd033);
+const _0xbe2d = _0x68ef.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x2339/0xc60 * _0x1e73[_0x51a9] - 0x163/0x21 * _0x585c[_0x51a9] + 0xb68c/0x147f * _0x4b52[_0x51a9] + 0x31/0xb0 * _0xc458[_0x51a9] - 0x13ef/0x48e0 * _0xd91d[_0x51a9]));
+const _0xa82a = _0x188b(_0xbe2d);
+const _0x45b3 = _0x68ef.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x23/0x180 * _0x1e73[_0x51a9] + 0x1f4/0x459 * _0x4b52[_0x51a9] + 0x7d/0xc0 * _0xc458[_0x51a9] - 0x88b/0x1a80 * _0xd91d[_0x51a9] + 0x0b/0x54 * _0xa82a[_0x51a9]));
+const _0x9989 = _0x188b(_0x45b3);
+const _0x8d13 = _0x68ef.map((_0x5f67, _0x51a9) => _0x5f67 + _0x8539 * (0x143b/0xe100 * _0x1e73[_0x51a9] + 0x1d93/0x4137 * _0x4b52[_0x51a9] + 0x189/0x280 * _0xc458[_0x51a9] - 0x167c1/0x52d00 * _0xd91d[_0x51a9] + 0xbb/0x834 * _0xa82a[_0x51a9] + 0x01/0x28 * _0x9989[_0x51a9]));
+const _0x8e5e = Math.sqrt(_0x45b3.reduce((_0xed0d, v, _0x51a9) => _0xed0d + (v - _0x8d13[_0x51a9])**0x02, 0x00) / _0x45b3.length);
+return { state: _0x45b3, error: _0x8e5e };
+}
+function _0x48ab(_0x68ef, mu) {
+const _0x1125 = _0x68ef.slice(0x00, 0x06);
+const _0x75a2 = _0xb673(_0x1125, mu);
+const _0x4679 = _0x8df6(_0x1125, mu);
+if (!_0x4679) {
+const _0xb718 = new Array(_0x68ef.length).fill(0x00);
+for (let _0x51a9 = 0x00; _0x51a9 < 0x06; _0x51a9++) _0xb718[_0x51a9] = _0x75a2[_0x51a9];
+return _0xb718;
+}
+const _0x3fb3 = _0x68ef.slice(0x06);
+const _0x0d2b = new Array(0x24).fill(0x00);
+for (let _0x680c = 0x00; _0x680c < 0x06; _0x680c++) {
+for (let _0x26c6 = 0x00; _0x26c6 < 0x06; _0x26c6++) {
+let _0xed0d = 0x00;
+for (let _0xd632 = 0x00; _0xd632 < 0x06; _0xd632++) {
+_0xed0d += _0x4679[_0x680c * 0x06 + _0xd632] * _0x3fb3[_0xd632 * 0x06 + _0x26c6];
+}
+_0x0d2b[_0x680c * 0x06 + _0x26c6] = _0xed0d;
+}
+}
+return _0x75a2.concat(_0x0d2b);
+}
+function _0xbdb1(x0, z0, vy0, mu, tol = 1e-12) {
+const _0xa94b = new Array(0x24).fill(0x00);
+for (let _0x51a9 = 0x00; _0x51a9 < 0x06; _0x51a9++) _0xa94b[_0x51a9 * 0x06 + _0x51a9] = 0x01;
+let _0x68ef = [x0, 0x00, z0, 0x00, vy0, 0x00].concat(_0xa94b);
+let _0x88a8 = 0x00, _0x8539 = 0.001;
+const _0x1a34 = 0x32, minDt = 1e-10, maxDt = 0.05;
+let _0x3905 = 0x00;
+let _0x9bda = false;
+const _0x409f = vy0 > 0x00 ? -0x01 : 0x01;
+const _0x188b = (v) => _0x48ab(v, mu);
+while (_0x88a8 < _0x1a34) {
+const _0x0282 = _0x68ef[0x01];
+const _0x1281 = _0x68ef.slice();
+const _0x0427 = _0x4d31(_0x68ef, _0x8539, _0x188b);
+const _0x8e5e = _0x0427.error;
+if (_0x8e5e > tol && _0x8539 > minDt) {
+_0x8539 = Math.max(minDt, _0x8539 * 0.5);
+continue;
+}
+_0x68ef = _0x0427.state;
+_0x88a8 += _0x8539;
+_0x3905++;
+const _0x163b = _0x68ef[0x00] - (0x01 - mu);
+const _0x7e08 = _0x163b * _0x163b + _0x68ef[0x01] * _0x68ef[0x01] + _0x68ef[0x02] * _0x68ef[0x02];
+if (_0x7e08 <= MOON_RADIUS * MOON_RADIUS) {
+return { state: _0x68ef.slice(0x00, 0x06), phi: _0x68ef.slice(0x06), _0x88a8, success: false, reason: '\x6d\x6f\x6f\x6e\x20\x69\x6d\x70\x61\x63\x74', _0x3905 };
+}
+if (!_0x9bda) {
+if (Math.abs(_0x68ef[0x01]) > 1e-4) _0x9bda = true;
+if (!_0x9bda) {
+if (_0x8e5e < tol * 0.1 && _0x8539 < maxDt) _0x8539 = Math.min(maxDt, _0x8539 * 1.5);
+continue;
+}
+}
+const _0x1e40 = (_0x409f < 0x00)
+? (_0x0282 > 0x00 && _0x68ef[0x01] <= 0x00)
+: (_0x0282 < 0x00 && _0x68ef[0x01] >= 0x00);
+if (_0x1e40) {
+let _0x79e0 = _0x88a8 - _0x8539, hiT = _0x88a8;
+let _0x786a = _0x1281, hiY = _0x68ef;
+for (let _0x51a9 = 0x00; _0x51a9 < 0x28; _0x51a9++) {
+const _0x6669 = (hiT - _0x79e0) * 0.5;
+const _0x7ca8 = _0x4d31(_0x786a, _0x6669, _0x188b);
+const _0x9e38 = _0x7ca8.state;
+const _0xed90 = _0x9e38[0x00] - (0x01 - mu);
+const _0xa7db = _0xed90 * _0xed90 + _0x9e38[0x01] * _0x9e38[0x01] + _0x9e38[0x02] * _0x9e38[0x02];
+if (_0xa7db <= MOON_RADIUS * MOON_RADIUS) {
+return { state: _0x9e38.slice(0x00, 0x06), phi: _0x9e38.slice(0x06), t: _0x79e0 + _0x6669, success: false, reason: '\x6d\x6f\x6f\x6e\x20\x69\x6d\x70\x61\x63\x74', _0x3905 };
+}
+if (Math.abs(_0x9e38[0x01]) < 1e-14) {
+return { state: _0x9e38.slice(0x00, 0x06), phi: _0x9e38.slice(0x06), t: _0x79e0 + _0x6669, success: true, _0x3905 };
+}
+const _0xa85d = (_0x409f < 0x00)
+? (_0x786a[0x01] > 0x00 && _0x9e38[0x01] <= 0x00)
+: (_0x786a[0x01] < 0x00 && _0x9e38[0x01] >= 0x00);
+if (_0xa85d) {
+hiT = _0x79e0 + _0x6669;
+hiY = _0x9e38;
+} else {
+_0x79e0 = _0x79e0 + _0x6669;
+_0x786a = _0x9e38;
+}
+}
+return { state: _0x786a.slice(0x00, 0x06), phi: _0x786a.slice(0x06), t: _0x79e0, success: true, _0x3905 };
+}
+if (_0x68ef[0x00]**0x02 + _0x68ef[0x01]**0x02 + _0x68ef[0x02]**0x02 > 0x19) {
+return { state: _0x68ef.slice(0x00, 0x06), phi: _0x68ef.slice(0x06), _0x88a8, success: false, reason: '\x65\x73\x63\x61\x70\x65\x64', _0x3905 };
+}
+if (_0x8e5e < tol * 0.1 && _0x8539 < maxDt) _0x8539 = Math.min(maxDt, _0x8539 * 1.5);
+}
+return { state: _0x68ef.slice(0x00, 0x06), phi: _0x68ef.slice(0x06), _0x88a8, success: false, reason: '\x74\x69\x6d\x65\x6f\x75\x74', _0x3905 };
+}
+function _0x8ca6(_0x3fb3, row, col) {
+return _0x3fb3[row * 0x06 + col];
+}
+function _0xf385(x0, z0, vy0, orbitType, maxIter = 0x64, tol = 1e-11) {
+let _0x5f67 = x0, z = z0, vy = vy0;
+const _0xdb93 = document.getElementById('\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73');
+const _0x3ac0 = (orbitType === '\x6c\x79\x61\x70\x75\x6e\x6f\x76' || orbitType === 'dro');
+let _0x1093 = 0x00;
+for (let _0xdfe5 = 0x00; _0xdfe5 < maxIter; _0xdfe5++) {
+const _0x0427 = _0xbdb1(_0x5f67, z, vy, _0xfc7e, 1e-12);
+_0x1093 += _0x0427.steps || 0x00;
+if (!_0x0427.success) {
+if (_0xdfe5 < maxIter - 0x01) {
+vy *= 0.99;
+continue;
+}
+return { success: false, message: `Failed: ${_0x0427.reason}` };
+}
+const _0x8d1f = _0x0427.state;
+const _0x3fb3 = _0x0427.phi;
+const _0xf393 = _0x8d1f[0x03];
+const _0xd4ee = _0x8d1f[0x04];
+const _0x5221 = _0x8d1f[0x05];
+const error = _0x3ac0 ? Math.abs(_0xf393) : Math.hypot(_0xf393, _0x5221);
+_0xdb93.textContent = `Iter ${_0xdfe5 + 0x01}: _0x8e5e=${error.toExponential(0x02)}, _0x3905=${_0x1093}`;
+_0xdb93.className = '\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73\x20\x77\x6f\x72\x6b\x69\x6e\x67';
+if (error < tol) {
+return { success: true, _0x5f67, z, vy, period: 0x02 * _0x0427.t, message: `Converged in ${_0xdfe5 + 0x01} iters (${_0x1093} _0x3905)` };
+}
+const _0x188b = _0xb673(_0x8d1f, _0xfc7e);
+const _0xe7a7 = _0x188b[0x03];
+const _0x8882 = _0x188b[0x05];
+if (Math.abs(_0xd4ee) < 1e-14) {
+vy *= 1.01;
+continue;
+}
+const _0x920b = -_0x8ca6(_0x3fb3, 0x01, 0x00) / _0xd4ee;
+const _0x2b25 = -_0x8ca6(_0x3fb3, 0x01, 0x04) / _0xd4ee;
+const _0xee22 = -_0x8ca6(_0x3fb3, 0x01, 0x02) / _0xd4ee;
+if (_0x3ac0) {
+const _0xef84 = _0x8ca6(_0x3fb3, 0x03, 0x04) + _0xe7a7 * _0x2b25;
+if (Math.abs(_0xef84) < 1e-14) {
+vy *= 1.01;
+continue;
+}
+const _0x8925 = -_0xf393 / _0xef84;
+let _0x9536 = 1.0;
+let _0x4f68 = vy;
+let _0xa813 = error;
+for (let _0xe3be = 0x00; _0xe3be < 0x0f; _0xe3be++) {
+const _0xf7ff = vy + _0x9536 * _0x8925;
+const _0x5ce6 = _0xbdb1(_0x5f67, z, _0xf7ff, _0xfc7e, 1e-12);
+_0x1093 += _0x5ce6.steps || 0x00;
+if (_0x5ce6.success) {
+const _0x7477 = Math.abs(_0x5ce6.state[0x03]);
+if (_0x7477 < _0xa813) {
+_0x4f68 = _0xf7ff;
+_0xa813 = _0x7477;
+}
+if (_0x7477 < error * 0.9 || _0x7477 < tol) break;
+}
+_0x9536 *= 0.5;
+}
+vy = _0x4f68;
+} else {
+const _0x62ff = _0x8ca6(_0x3fb3, 0x03, 0x00) + _0xe7a7 * _0x920b;
+const _0xfb54 = _0x8ca6(_0x3fb3, 0x03, 0x04) + _0xe7a7 * _0x2b25;
+const _0xe606 = _0x8ca6(_0x3fb3, 0x05, 0x00) + _0x8882 * _0x920b;
+const _0x0d35 = _0x8ca6(_0x3fb3, 0x05, 0x04) + _0x8882 * _0x2b25;
+const _0x4bbb = _0x62ff * _0x0d35 - _0xfb54 * _0xe606;
+if (Math.abs(_0x4bbb) < 1e-14) {
+vy *= 1.01;
+continue;
+}
+const _0x7e62 = (-_0x0d35 * _0xf393 + _0xfb54 * _0x5221) / _0x4bbb;
+const _0x8925 = (_0xe606 * _0xf393 - _0x62ff * _0x5221) / _0x4bbb;
+let _0x9536 = 1.0;
+let _0x676c = _0x5f67, _0x4f68 = vy;
+let _0xa813 = error;
+for (let _0xe3be = 0x00; _0xe3be < 0x0f; _0xe3be++) {
+const _0x80bd = _0x5f67 + _0x9536 * _0x7e62;
+const _0xf7ff = vy + _0x9536 * _0x8925;
+const _0x5ce6 = _0xbdb1(_0x80bd, z, _0xf7ff, _0xfc7e, 1e-12);
+_0x1093 += _0x5ce6.steps || 0x00;
+if (_0x5ce6.success) {
+const _0x7477 = Math.hypot(_0x5ce6.state[0x03], _0x5ce6.state[0x05]);
+if (_0x7477 < _0xa813) {
+_0x676c = _0x80bd;
+_0x4f68 = _0xf7ff;
+_0xa813 = _0x7477;
+}
+if (_0x7477 < error * 0.9 || _0x7477 < tol) break;
+}
+_0x9536 *= 0.5;
+}
+_0x5f67 = _0x676c;
+vy = _0x4f68;
+}
+}
+return { success: false, message: '\x4d\x61\x78\x20\x69\x74\x65\x72\x61\x74\x69\x6f\x6e\x73\x20\x72\x65\x61\x63\x68\x65\x64' };
+}
+async function _0xa79e() {
+const _0x0916 = document.getElementById('\x73\x6f\x6c\x76\x65\x2d\x62\x74\x6e'), _0xdb93 = document.getElementById('\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73');
+_0x0916.disabled = true; _0xdb93.textContent = '\x53\x6f\x6c\x76\x69\x6e\x67\x2e\x2e\x2e'; _0xdb93.className = '\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73\x20\x77\x6f\x72\x6b\x69\x6e\x67';
+await new Promise(_0x680c => setTimeout(_0x680c, 0x0a));
+const _0x0427 = _0xf385(_0x21b4.x, _0x21b4.z, _0x21b4.vy, _0x21b4.type || '\x68\x61\x6c\x6f');
+if (_0x0427.success) {
+_0x21b4.x = _0x0427.x; _0x21b4.y = 0x00; _0x21b4.z = _0x0427.z; _0x21b4.vx = 0x00; _0x21b4.vy = _0x0427.vy; _0x21b4.vz = 0x00; _0x21b4.t = _0x0427.period;
+Object.keys(_0xea1d).forEach(_0xd632 => _0xea1d[_0xd632]?.());
+_0xdb93.textContent = `✓ ${_0x0427.message}. T=${_0x0427.period.toFixed(0x04)} TU`;
+_0xdb93.className = '\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73\x20\x73\x75\x63\x63\x65\x73\x73'; needsRender = true;
+} else { _0xdb93.textContent = `✗ ${_0x0427.message}`; _0xdb93.className = '\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73\x20\x65\x72\x72\x6f\x72'; }
+_0x0916.disabled = false;
+}
+function _0x2d3c(x0, z0, vy0, period, numPoints = 0x190) {
+let _0x68ef = [x0, 0x00, z0, 0x00, vy0, 0x00];
+const _0x8539 = period / numPoints;
+const _0xff60 = [[x0, 0x00, z0]];
+for (let _0x51a9 = 0x01; _0x51a9 < numPoints; _0x51a9++) {
+const _0x1e73 = _0xb673(_0x68ef, _0xfc7e);
+const _0x8b39 = _0x68ef.map((_0x5f67, _0x3c22) => _0x5f67 + _0x8539 * 0.5 * _0x1e73[_0x3c22]);
+const _0x585c = _0xb673(_0x8b39, _0xfc7e);
+const _0x82a9 = _0x68ef.map((_0x5f67, _0x3c22) => _0x5f67 + _0x8539 * 0.5 * _0x585c[_0x3c22]);
+const _0x4b52 = _0xb673(_0x82a9, _0xfc7e);
+const _0x3104 = _0x68ef.map((_0x5f67, _0x3c22) => _0x5f67 + _0x8539 * _0x4b52[_0x3c22]);
+const _0xc458 = _0xb673(_0x3104, _0xfc7e);
+_0x68ef = _0x68ef.map((_0x5f67, _0x3c22) => _0x5f67 + _0x8539/0x06 * (_0x1e73[_0x3c22] + 0x02*_0x585c[_0x3c22] + 0x02*_0x4b52[_0x3c22] + _0xc458[_0x3c22]));
+_0xff60.push([_0x68ef[0x00], _0x68ef[0x01], _0x68ef[0x02]]);
+}
+return _0xff60;
+}
+function _0x62b8(idx, total) {
+const _0xd676 = (idx / Math.max(total - 0x01, 0x01)) * 0.75;
+const _0x90a5 = _0xd676 * 0x06;
+const _0x26c6 = 0.85, m = 0.15;
+let _0x680c, g, b;
+if (_0x90a5 < 0x01) { _0x680c = _0x26c6; g = _0x26c6 * _0x90a5; b = 0x00; }
+else if (_0x90a5 < 0x02) { _0x680c = _0x26c6 * (0x02 - _0x90a5); g = _0x26c6; b = 0x00; }
+else if (_0x90a5 < 0x03) { _0x680c = 0x00; g = _0x26c6; b = _0x26c6 * (_0x90a5 - 0x02); }
+else if (_0x90a5 < 0x04) { _0x680c = 0x00; g = _0x26c6 * (0x04 - _0x90a5); b = _0x26c6; }
+else if (_0x90a5 < 0x05) { _0x680c = _0x26c6 * (_0x90a5 - 0x04); g = 0x00; b = _0x26c6; }
+else { _0x680c = _0x26c6; g = 0x00; b = _0x26c6 * (0x06 - _0x90a5); }
+return [_0x680c + m, g + m, b + m, 0.8];
+}
+async function _0x1a22() {
+for (const _0x0332 of _0xed66) { _0x0332.vertexBuf.destroy(); _0x0332.uniformBuf.destroy(); }
+_0xed66 = [];
+for (let _0x51a9 = 0x00; _0x51a9 < _0x34a8.length; _0x51a9++) {
+const _0x4462 = _0x34a8[_0x51a9];
+const numPoints = _0x4462.points.length;
+const _0x3cbd = new Float32Array(numPoints * 0x04);
+for (let _0x3c22 = 0x00; _0x3c22 < numPoints; _0x3c22++) {
+_0x3cbd[_0x3c22 * 0x04] = _0x4462.points[_0x3c22][0x00];
+_0x3cbd[_0x3c22 * 0x04 + 0x01] = _0x4462.points[_0x3c22][0x01];
+_0x3cbd[_0x3c22 * 0x04 + 0x02] = _0x4462.points[_0x3c22][0x02];
+_0x3cbd[_0x3c22 * 0x04 + 0x03] = 1.0;
+}
+const vertexBuf = device.createBuffer({ size: _0x3cbd.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+device.queue.writeBuffer(vertexBuf, 0x00, _0x3cbd);
+const uniformBuf = device.createBuffer({ size: 0x90, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+const bindGroup = device.createBindGroup({ layout: familyLinePipeline.getBindGroupLayout(0x00), entries: [{ binding: 0x00, resource: { buffer: uniformBuf } }] });
+_0xed66.push({ vertexBuf, uniformBuf, bindGroup, numPoints, color: _0x4462.color });
+}
+}
+function _0xa7ae() {
+document.getElementById('\x66\x61\x6d\x69\x6c\x79\x2d\x63\x6f\x75\x6e\x74').textContent = _0x34a8.length;
+if (_0x34a8.length > 0x00) {
+const _0xe11f = _0x34a8.map(o => o.jacobi).filter(_0x3c22 => !isNaN(_0x3c22));
+document.getElementById('\x6a\x61\x63\x6f\x62\x69\x2d\x72\x61\x6e\x67\x65').textContent = `${Math.min(..._0xe11f).toFixed(0x03)}–${Math.max(..._0xe11f).toFixed(0x03)}`;
+} else {
+document.getElementById('\x6a\x61\x63\x6f\x62\x69\x2d\x72\x61\x6e\x67\x65').textContent = '--';
+}
+const _0x4c98 = document.getElementById('\x6f\x72\x62\x69\x74\x2d\x6c\x69\x73\x74');
+_0x4c98.innerHTML = '';
+_0x34a8.forEach((_0x4462, idx) => {
+const _0x3358 = document.createElement('div');
+_0x3358.className = '\x6f\x72\x62\x69\x74\x2d\x69\x74\x65\x6d';
+const _0x74a1 = document.createElement('div');
+_0x74a1.className = '\x6f\x72\x62\x69\x74\x2d\x63\x6f\x6c\x6f\x72';
+_0x74a1.style.background = `rgb(${_0x4462.color[0x00]*0xff|0x00},${_0x4462.color[0x01]*0xff|0x00},${_0x4462.color[0x02]*0xff|0x00})`;
+const _0x27df = document.createElement('\x73\x70\x61\x6e');
+_0x27df.style.flex = '0x01';
+_0x27df.textContent = `_0x5f67=${_0x4462.x.toFixed(0x03)} T=${_0x4462.period.toFixed(0x02)}`;
+_0x3358.appendChild(_0x74a1);
+_0x3358.appendChild(_0x27df);
+_0x3358.addEventListener('\x63\x6c\x69\x63\x6b', () => {
+_0x21b4.x = _0x4462.x; _0x21b4.y = 0x00; _0x21b4.z = _0x4462.z;
+_0x21b4.vx = 0x00; _0x21b4.vy = _0x4462.vy; _0x21b4.vz = 0x00; _0x21b4.t = _0x4462.period;
+Object.keys(_0xea1d).forEach(_0xd632 => _0xea1d[_0xd632]?.());
+needsRender = true;
+});
+_0x4c98.appendChild(_0x3358);
+});
+}
+async function _0xac80() {
+const _0xdb93 = document.getElementById('\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73');
+const _0x46a2 = document.getElementById('\x66\x61\x6d\x69\x6c\x79\x2d\x62\x74\x6e');
+const _0x0916 = document.getElementById('\x73\x6f\x6c\x76\x65\x2d\x62\x74\x6e');
+_0x46a2.disabled = true; _0x0916.disabled = true;
+_0xdb93.textContent = '\x46\x69\x6e\x64\x69\x6e\x67\x20\x69\x6e\x69\x74\x69\x61\x6c\x20\x6f\x72\x62\x69\x74\x2e\x2e\x2e'; _0xdb93.className = '\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73\x20\x77\x6f\x72\x6b\x69\x6e\x67';
+await new Promise(_0x680c => setTimeout(_0x680c, 0x0a));
+const _0x4d18 = _0xf385(_0x21b4.x, _0x21b4.z, _0x21b4.vy, _0x21b4.type || '\x68\x61\x6c\x6f');
+if (!_0x4d18.success) {
+_0xdb93.textContent = `✗ ${_0x4d18.message}`; _0xdb93.className = '\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73\x20\x65\x72\x72\x6f\x72';
+_0x46a2.disabled = false; _0x0916.disabled = false; return;
+}
+_0x34a8 = [];
+const _0xd350 = _0x594b(_0x4d18.x, 0x00, _0x4d18.z, 0x00, _0x4d18.vy, 0x00);
+_0x34a8.push({
+x: _0x4d18.x, z: _0x4d18.z, vy: _0x4d18.vy,
+period: _0x4d18.period, jacobi: _0xd350,
+points: _0x2d3c(_0x4d18.x, _0x4d18.z, _0x4d18.vy, _0x4d18.period),
+color: [0.3, 1.0, 0.4, 1.0]
+});
+const _0x4ce5 = _0x2294.numOrbits;
+const _0x6c3f = _0x2294.stepSize * _0x2294.direction;
+let _0x74c6 = _0x4d18.x, currentZ = _0x4d18.z, currentVy = _0x4d18.vy;
+let _0xa28b = 0x00;
+for (let _0x51a9 = 0x01; _0x51a9 < _0x4ce5 && _0xa28b < 0x03; _0x51a9++) {
+_0xdb93.textContent = `Computing _0x4462 ${_0x51a9 + 0x01}/${_0x4ce5}...`;
+await new Promise(_0x680c => setTimeout(_0x680c, 0x01));
+const _0xb667 = _0x74c6 + _0x6c3f;
+const _0x0427 = _0xf385(_0xb667, currentZ, currentVy, _0x21b4.type || '\x68\x61\x6c\x6f');
+if (!_0x0427.success) { _0xa28b++; continue; }
+_0xa28b = 0x00;
+_0x74c6 = _0x0427.x; currentZ = _0x0427.z; currentVy = _0x0427.vy;
+const _0x380e = _0x594b(_0x0427.x, 0x00, _0x0427.z, 0x00, _0x0427.vy, 0x00);
+_0x34a8.push({
+x: _0x0427.x, z: _0x0427.z, vy: _0x0427.vy,
+period: _0x0427.period, jacobi: _0x380e,
+points: _0x2d3c(_0x0427.x, _0x0427.z, _0x0427.vy, _0x0427.period),
+color: _0x62b8(_0x51a9, _0x4ce5)
+});
+}
+await _0x1a22();
+_0xa7ae();
+_0xdb93.textContent = `✓ Computed ${_0x34a8.length} family members`;
+_0xdb93.className = '\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73\x20\x73\x75\x63\x63\x65\x73\x73';
+_0x46a2.disabled = false; _0x0916.disabled = false;
+needsRender = true;
+}
+function _0x2764() {
+for (const _0x0332 of _0xed66) { _0x0332.vertexBuf.destroy(); _0x0332.uniformBuf.destroy(); }
+_0xed66 = []; _0x34a8 = [];
+_0xa7ae(); needsRender = true;
+}
+function _0x594b(_0x5f67, _0x68ef, z, vx, vy, vz) {
+const _0xa2f4 = Math.sqrt((_0x5f67 + _0xfc7e)**0x02 + _0x68ef*_0x68ef + z*z), _0x2085 = Math.sqrt((_0x5f67 - 0x01 + _0xfc7e)**0x02 + _0x68ef*_0x68ef + z*z);
+if (_0xa2f4 < 0.001 || _0x2085 < 0.001) return NaN;
+return 0x02 * (0.5 * (_0x5f67*_0x5f67 + _0x68ef*_0x68ef) + (0x01 - _0xfc7e)/_0xa2f4 + _0xfc7e/_0x2085) - (vx*vx + vy*vy + vz*vz);
+}
+function _0x7d6f() {
+const _0x27e4 = _0x594b(_0x21b4.x, _0x21b4.y, _0x21b4.z, _0x21b4.vx, _0x21b4.vy, _0x21b4.vz);
+document.getElementById('\x6a\x61\x63\x6f\x62\x69\x2d\x76\x61\x6c\x75\x65').textContent = isNaN(_0x27e4) ? '--' : _0x27e4.toFixed(0x06);
+}
+function _0x356d(_0x680c, seg = 0x20) {
+const _0x237e = [], uvs = [], idx = [];
+for (let _0xecf8 = 0x00; _0xecf8 <= seg; _0xecf8++) {
+const _0x88a8 = _0xecf8 * Math.PI / seg, _0x8d1f = Math.sin(_0x88a8), ct = Math.cos(_0x88a8);
+for (let _0x6dae = 0x00; _0x6dae <= seg; _0x6dae++) {
+const _0x2d59 = _0x6dae * 0x02 * Math.PI / seg;
+_0x237e.push(_0x680c * Math.cos(_0x2d59) * _0x8d1f, _0x680c * ct, _0x680c * Math.sin(_0x2d59) * _0x8d1f, 0x01);
+uvs.push(_0x6dae / seg, _0xecf8 / seg);
+}
+}
+for (let _0xecf8 = 0x00; _0xecf8 < seg; _0xecf8++) for (let _0x6dae = 0x00; _0x6dae < seg; _0x6dae++) {
+const _0x9fdb = _0xecf8 * (seg + 0x01) + _0x6dae, _0x1125 = _0x9fdb + seg + 0x01;
+idx.push(_0x9fdb, _0x1125, _0x9fdb + 0x01, _0x1125, _0x1125 + 0x01, _0x9fdb + 0x01);
+}
+return { verts: new Float32Array(_0x237e), uvs: new Float32Array(uvs), idx: new Uint32Array(idx) };
+}
+async function _0xa2db(url) {
+const _0x8fe9 = await fetch(url).then(_0x680c => _0x680c.blob()).then(b => createImageBitmap(b));
+const _0x8e6b = device.createTexture({ size: [_0x8fe9.width, _0x8fe9.height], format: '\x72\x67\x62\x61\x38\x75\x6e\x6f\x72\x6d', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT });
+device.queue.copyExternalImageToTexture({ source: _0x8fe9 }, { texture: _0x8e6b }, [_0x8fe9.width, _0x8fe9.height]);
+return _0x8e6b;
+}
+function _0xb337(id, key) {
+const _0x922f = document.getElementById('slider-' + id), _0x178e = document.getElementById('input-' + id);
+const _0x3693 = () => { _0x922f.value = _0x21b4[key]; _0x178e.value = _0x21b4[key]; _0x7d6f(); };
+_0x922f.addEventListener('\x69\x6e\x70\x75\x74', e => { _0x21b4[key] = parseFloat(e.target.value); _0x178e.value = _0x21b4[key]; needsRender = true; _0x7d6f(); });
+_0x178e.addEventListener('\x69\x6e\x70\x75\x74', e => { const _0x9a71 = parseFloat(e.target.value); if (!isNaN(_0x9a71)) { _0x21b4[key] = _0x9a71; _0x922f.value = Math.max(_0x922f.min, Math.min(_0x922f.max, _0x9a71)); needsRender = true; _0x7d6f(); } });
+_0x3693(); return _0x3693;
+}
+const _0xea1d = {};
+['x', 'y', 'z', 'vx', 'vy', 'vz', 't'].forEach(_0xd632 => _0xea1d[_0xd632] = _0xb337(_0xd632, _0xd632));
+function _0x2c92(id, key) {
+const _0x922f = document.getElementById('slider-' + id);
+const _0x178e = document.getElementById('input-' + id);
+_0x922f.addEventListener('\x69\x6e\x70\x75\x74', e => { _0x2294[key] = parseFloat(e.target.value); _0x178e.value = _0x2294[key]; });
+_0x178e.addEventListener('\x69\x6e\x70\x75\x74', e => { const _0x9a71 = parseFloat(e.target.value); if (!isNaN(_0x9a71)) { _0x2294[key] = _0x9a71; _0x922f.value = Math.max(_0x922f.min, Math.min(_0x922f.max, _0x9a71)); } });
+}
+_0x2c92('\x6e\x75\x6d\x4f\x72\x62\x69\x74\x73', '\x6e\x75\x6d\x4f\x72\x62\x69\x74\x73');
+_0x2c92('\x73\x74\x65\x70\x53\x69\x7a\x65', '\x73\x74\x65\x70\x53\x69\x7a\x65');
+document.getElementById('\x64\x69\x72\x2d\x6d\x69\x6e\x75\x73').addEventListener('\x63\x6c\x69\x63\x6b', () => {
+_0x2294.direction = -0x01;
+document.getElementById('\x64\x69\x72\x2d\x6d\x69\x6e\x75\x73').classList.add('\x61\x63\x74\x69\x76\x65');
+document.getElementById('\x64\x69\x72\x2d\x70\x6c\x75\x73').classList.remove('\x61\x63\x74\x69\x76\x65');
+});
+document.getElementById('\x64\x69\x72\x2d\x70\x6c\x75\x73').addEventListener('\x63\x6c\x69\x63\x6b', () => {
+_0x2294.direction = 0x01;
+document.getElementById('\x64\x69\x72\x2d\x70\x6c\x75\x73').classList.add('\x61\x63\x74\x69\x76\x65');
+document.getElementById('\x64\x69\x72\x2d\x6d\x69\x6e\x75\x73').classList.remove('\x61\x63\x74\x69\x76\x65');
+});
+document.getElementById('\x66\x61\x6d\x69\x6c\x79\x2d\x62\x74\x6e').addEventListener('\x63\x6c\x69\x63\x6b', _0xac80);
+document.getElementById('\x63\x6c\x65\x61\x72\x2d\x62\x74\x6e').addEventListener('\x63\x6c\x69\x63\x6b', _0x2764);
+document.querySelectorAll('\x2e\x70\x72\x65\x73\x65\x74\x2d\x62\x74\x6e').forEach(btn => {
+btn.addEventListener('\x63\x6c\x69\x63\x6b', () => {
+document.querySelectorAll('\x2e\x70\x72\x65\x73\x65\x74\x2d\x62\x74\x6e').forEach(b => b.classList.remove('\x61\x63\x74\x69\x76\x65'));
+btn.classList.add('\x61\x63\x74\x69\x76\x65');
+Object.assign(_0x21b4, _0xfe65[btn.dataset.preset]);
+Object.keys(_0xea1d).forEach(_0xd632 => _0xea1d[_0xd632]?.());
+document.getElementById('\x73\x6f\x6c\x76\x65\x2d\x73\x74\x61\x74\x75\x73').textContent = '';
+needsRender = true;
+});
+});
+document.getElementById('\x73\x6f\x6c\x76\x65\x2d\x62\x74\x6e').addEventListener('\x63\x6c\x69\x63\x6b', _0xa79e);
+document.getElementById('\x6d\x61\x6e\x69\x66\x6f\x6c\x64\x2d\x68\x65\x61\x64\x65\x72').addEventListener('\x63\x6c\x69\x63\x6b', () => {
+const _0x41a1 = document.getElementById('\x6d\x61\x6e\x69\x66\x6f\x6c\x64\x2d\x63\x6f\x6e\x74\x65\x6e\x74');
+const _0xa62a = document.getElementById('\x6d\x61\x6e\x69\x66\x6f\x6c\x64\x2d\x61\x72\x72\x6f\x77');
+if (_0x41a1.classList.contains('\x63\x6f\x6c\x6c\x61\x70\x73\x65\x64')) {
+_0x41a1.classList.remove('\x63\x6f\x6c\x6c\x61\x70\x73\x65\x64');
+_0x41a1.style.maxHeight = _0x41a1.scrollHeight + 'px';
+_0xa62a.classList.remove('\x63\x6f\x6c\x6c\x61\x70\x73\x65\x64');
+} else {
+_0x41a1.classList.add('\x63\x6f\x6c\x6c\x61\x70\x73\x65\x64');
+_0x41a1.style.maxHeight = '0x00';
+_0xa62a.classList.add('\x63\x6f\x6c\x6c\x61\x70\x73\x65\x64');
+}
+});
+const _0x61b3 = document.getElementById('\x6d\x61\x6e\x69\x66\x6f\x6c\x64\x2d\x63\x6f\x6e\x74\x65\x6e\x74');
+const _0xbacd = document.getElementById('\x6d\x61\x6e\x69\x66\x6f\x6c\x64\x2d\x61\x72\x72\x6f\x77');
+_0x61b3.classList.add('\x63\x6f\x6c\x6c\x61\x70\x73\x65\x64');
+_0x61b3.style.maxHeight = '0x00';
+_0xbacd.classList.add('\x63\x6f\x6c\x6c\x61\x70\x73\x65\x64');
+async function _0x5534() {
+if (!navigator.gpu) { document.getElementById('\x65\x72\x72\x6f\x72').style.display = '\x62\x6c\x6f\x63\x6b'; return; }
+const _0x3a0b = await navigator.gpu.requestAdapter();
+if (!_0x3a0b) { document.getElementById('\x65\x72\x72\x6f\x72').style.display = '\x62\x6c\x6f\x63\x6b'; return; }
+device = await _0x3a0b.requestDevice();
+canvas = document.getElementById('\x63\x61\x6e\x76\x61\x73');
+context = canvas.getContext('\x77\x65\x62\x67\x70\x75');
+const format = navigator.gpu.getPreferredCanvasFormat();
+context.configure({ device, format, alphaMode: '\x70\x72\x65\x6d\x75\x6c\x74\x69\x70\x6c\x69\x65\x64' });
+_0x17c7 = device.createBuffer({ size: 0x30, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+pointBuf = device.createBuffer({ size: _0x9f56 * 0x10, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX });
+orbitUniformBuf = device.createBuffer({ size: 0xa0, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+earthUniformBuf = device.createBuffer({ size: 0xb0, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+moonUniformBuf = device.createBuffer({ size: 0xb0, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+const _0x91db = device.createShaderModule({ code: document.getElementById('wgsl-compute').text });
+const _0x6b90 = device.createBindGroupLayout({ entries: [{ binding: 0x00, visibility: GPUShaderStage.COMPUTE, buffer: { type: '\x75\x6e\x69\x66\x6f\x72\x6d' } }, { binding: 0x01, visibility: GPUShaderStage.COMPUTE, buffer: { type: '\x73\x74\x6f\x72\x61\x67\x65' } }] });
+computePipeline = device.createComputePipeline({ layout: device.createPipelineLayout({ bindGroupLayouts: [_0x6b90] }), compute: { module: _0x91db, entryPoint: '\x6d\x61\x69\x6e' } });
+_0x8c60 = device.createBindGroup({ layout: _0x6b90, entries: [{ binding: 0x00, resource: { buffer: _0x17c7 } }, { binding: 0x01, resource: { buffer: pointBuf } }] });
+const _0xe494 = device.createShaderModule({ code: document.getElementById('wgsl-line').text });
+const _0xa29e = device.createBindGroupLayout({ entries: [{ binding: 0x00, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: '\x75\x6e\x69\x66\x6f\x72\x6d' } }] });
+linePipeline = device.createRenderPipeline({
+layout: device.createPipelineLayout({ bindGroupLayouts: [_0xa29e] }),
+vertex: { module: _0xe494, entryPoint: 'vs', buffers: [{ arrayStride: 0x10, attributes: [{ shaderLocation: 0x00, offset: 0x00, format: '\x66\x6c\x6f\x61\x74\x33\x32\x78\x34' }] }] },
+fragment: { module: _0xe494, entryPoint: 'fs', targets: [{ format }] },
+primitive: { topology: '\x6c\x69\x6e\x65\x2d\x73\x74\x72\x69\x70' },
+depthStencil: { depthWriteEnabled: true, depthCompare: '\x6c\x65\x73\x73', format: '\x64\x65\x70\x74\x68\x32\x34\x70\x6c\x75\x73' }
+});
+orbitBG = device.createBindGroup({ layout: _0xa29e, entries: [{ binding: 0x00, resource: { buffer: orbitUniformBuf } }] });
+const _0xbce9 = device.createShaderModule({ code: document.getElementById('wgsl-family-line').text });
+familyLinePipeline = device.createRenderPipeline({
+layout: device.createPipelineLayout({ bindGroupLayouts: [_0xa29e] }),
+vertex: { module: _0xbce9, entryPoint: 'vs', buffers: [{ arrayStride: 0x10, attributes: [{ shaderLocation: 0x00, offset: 0x00, format: '\x66\x6c\x6f\x61\x74\x33\x32\x78\x34' }] }] },
+fragment: { module: _0xbce9, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: '\x73\x72\x63\x2d\x61\x6c\x70\x68\x61', dstFactor: '\x6f\x6e\x65\x2d\x6d\x69\x6e\x75\x73\x2d\x73\x72\x63\x2d\x61\x6c\x70\x68\x61' }, alpha: { srcFactor: 'one', dstFactor: '\x6f\x6e\x65\x2d\x6d\x69\x6e\x75\x73\x2d\x73\x72\x63\x2d\x61\x6c\x70\x68\x61' } } }] },
+primitive: { topology: '\x6c\x69\x6e\x65\x2d\x73\x74\x72\x69\x70' },
+depthStencil: { depthWriteEnabled: true, depthCompare: '\x6c\x65\x73\x73', format: '\x64\x65\x70\x74\x68\x32\x34\x70\x6c\x75\x73' }
+});
+const _0x8c97 = device.createShaderModule({ code: document.getElementById('wgsl-sphere').text });
+const _0x0c06 = device.createBindGroupLayout({ entries: [
+{ binding: 0x00, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: '\x75\x6e\x69\x66\x6f\x72\x6d' } },
+{ binding: 0x01, visibility: GPUShaderStage.FRAGMENT, sampler: { type: '\x66\x69\x6c\x74\x65\x72\x69\x6e\x67' } },
+{ binding: 0x02, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: '\x66\x6c\x6f\x61\x74' } }
+]});
+spherePipeline = device.createRenderPipeline({
+layout: device.createPipelineLayout({ bindGroupLayouts: [_0x0c06] }),
+vertex: { module: _0x8c97, entryPoint: 'vs', buffers: [{ arrayStride: 0x10, attributes: [{ shaderLocation: 0x00, offset: 0x00, format: '\x66\x6c\x6f\x61\x74\x33\x32\x78\x34' }] }, { arrayStride: 0x08, attributes: [{ shaderLocation: 0x01, offset: 0x00, format: '\x66\x6c\x6f\x61\x74\x33\x32\x78\x32' }] }] },
+fragment: { module: _0x8c97, entryPoint: 'fs', targets: [{ format }] },
+primitive: { topology: '\x74\x72\x69\x61\x6e\x67\x6c\x65\x2d\x6c\x69\x73\x74', cullMode: '\x62\x61\x63\x6b' },
+depthStencil: { depthWriteEnabled: true, depthCompare: '\x6c\x65\x73\x73', format: '\x64\x65\x70\x74\x68\x32\x34\x70\x6c\x75\x73' }
+});
+const _0x4170 = device.createSampler({ magFilter: '\x6c\x69\x6e\x65\x61\x72', minFilter: '\x6c\x69\x6e\x65\x61\x72' });
+const _0xad41 = await _0xa2db('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg');
+const _0x271d = await _0xa2db('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/moon_1024.jpg');
+function _0x00de(sphere) {
+const vb = device.createBuffer({ size: sphere.verts.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+const ub = device.createBuffer({ size: sphere.uvs.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+const ib = device.createBuffer({ size: sphere.idx.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+device.queue.writeBuffer(vb, 0x00, sphere.verts); device.queue.writeBuffer(ub, 0x00, sphere.uvs); device.queue.writeBuffer(ib, 0x00, sphere.idx);
+return { vb, ub, ib, count: sphere.idx.length };
+}
+earthGeo = _0x00de(_0x356d(_0xb44e, 0x20));
+moonGeo = _0x00de(_0x356d(MOON_RADIUS, 0x18));
+earthBG = device.createBindGroup({ layout: _0x0c06, entries: [{ binding: 0x00, resource: { buffer: earthUniformBuf } }, { binding: 0x01, resource: _0x4170 }, { binding: 0x02, resource: _0xad41.createView() }] });
+moonBG = device.createBindGroup({ layout: _0x0c06, entries: [{ binding: 0x00, resource: { buffer: moonUniformBuf } }, { binding: 0x01, resource: _0x4170 }, { binding: 0x02, resource: _0x271d.createView() }] });
+_0xc97b(); window.addEventListener('\x72\x65\x73\x69\x7a\x65', _0xc97b);
+let _0x6b91 = false, lastX, lastY;
+canvas.addEventListener('\x6d\x6f\x75\x73\x65\x64\x6f\x77\x6e', e => { _0x6b91 = true; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener('\x6d\x6f\x75\x73\x65\x75\x70', () => _0x6b91 = false);
+window.addEventListener('\x6d\x6f\x75\x73\x65\x6d\x6f\x76\x65', e => { if (!_0x6b91) return; _0x84a7 -= (e.clientX - lastX) * 0.01; camElev = Math.max(0.1, Math.min(Math.PI - 0.1, camElev + (e.clientY - lastY) * 0.01)); lastX = e.clientX; lastY = e.clientY; needsRender = true; });
+canvas.addEventListener('\x77\x68\x65\x65\x6c', e => { e.preventDefault(); camZoom = Math.max(0.05, Math.min(0x32, camZoom * (0x01 + e.deltaY * 0.001))); needsRender = true; }, { passive: false });
+requestAnimationFrame(_0x9362);
+}
+function _0xc97b() {
+canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+depthTex = device.createTexture({ size: [canvas.width, canvas.height], format: '\x64\x65\x70\x74\x68\x32\x34\x70\x6c\x75\x73', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+needsRender = true;
+}
+function _0x9362() {
+if (needsRender) {
+device.queue.writeBuffer(_0x17c7, 0x00, new Float32Array([_0x21b4.x, _0x21b4.y, _0x21b4.z, 0x00, _0x21b4.vx, _0x21b4.vy, _0x21b4.vz, 0x00, _0xfc7e, _0x21b4.t, _0x9f56, MOON_RADIUS]));
+const lookAt = [MOON_X, 0x00, 0x00];
+const _0x87dd = [lookAt[0x00] + Math.cos(_0x84a7) * Math.sin(camElev) * camZoom, lookAt[0x01] + Math.cos(camElev) * camZoom, lookAt[0x02] + Math.sin(_0x84a7) * Math.sin(camElev) * camZoom];
+const view = mat4.lookAt(_0x87dd, lookAt, [0x00, 0x01, 0x00]);
+const _0x438d = mat4.perspective(0x32 * Math.PI / 0xb4, canvas.width / canvas.height, 0.001, 0xc8);
+const _0x3908 = mat4.multiply(_0x438d, view);
+device.queue.writeBuffer(orbitUniformBuf, 0x00, _0x3908);
+device.queue.writeBuffer(orbitUniformBuf, 0x40, mat4.identity());
+device.queue.writeBuffer(orbitUniformBuf, 0x80, new Float32Array([0x00, 0x01, 0.6, 0x01]));
+device.queue.writeBuffer(earthUniformBuf, 0x00, _0x3908);
+device.queue.writeBuffer(earthUniformBuf, 0x40, mat4.translation([_0x1848, 0x00, 0x00]));
+device.queue.writeBuffer(earthUniformBuf, 0x80, new Float32Array([0x01, 0x01, 0x01, 0x01]));
+device.queue.writeBuffer(earthUniformBuf, 0x90, new Float32Array([1.0, 0.41, 0.71, 1.0]));
+device.queue.writeBuffer(earthUniformBuf, 0xa0, new Float32Array([_0x87dd[0x00], _0x87dd[0x01], _0x87dd[0x02], 0x01]));
+device.queue.writeBuffer(moonUniformBuf, 0x00, _0x3908);
+device.queue.writeBuffer(moonUniformBuf, 0x40, mat4.translation([MOON_X, 0x00, 0x00]));
+device.queue.writeBuffer(moonUniformBuf, 0x80, new Float32Array([0x01, 0x01, 0x01, 0x01]));
+device.queue.writeBuffer(moonUniformBuf, 0x90, new Float32Array([0.56, 0.93, 0.56, 1.0]));
+device.queue.writeBuffer(moonUniformBuf, 0xa0, new Float32Array([_0x87dd[0x00], _0x87dd[0x01], _0x87dd[0x02], 0x01]));
+for (const _0x0332 of _0xed66) {
+device.queue.writeBuffer(_0x0332.uniformBuf, 0x00, _0x3908);
+device.queue.writeBuffer(_0x0332.uniformBuf, 0x40, mat4.identity());
+device.queue.writeBuffer(_0x0332.uniformBuf, 0x80, new Float32Array(_0x0332.color));
+}
+const _0xc3ad = device.createCommandEncoder();
+const _0x98c9 = _0xc3ad.beginComputePass(); _0x98c9.setPipeline(computePipeline); _0x98c9.setBindGroup(0x00, _0x8c60); _0x98c9.dispatchWorkgroups(Math.ceil(_0x9f56 / 0x100)); _0x98c9.end();
+const _0x0d7d = _0xc3ad.beginRenderPass({
+colorAttachments: [{ view: context.getCurrentTexture().createView(), clearValue: { r: 0.01, g: 0.01, b: 0.02, a: 0x01 }, loadOp: '\x63\x6c\x65\x61\x72', storeOp: '\x73\x74\x6f\x72\x65' }],
+depthStencilAttachment: { view: depthTex.createView(), depthClearValue: 0x01, depthLoadOp: '\x63\x6c\x65\x61\x72', depthStoreOp: '\x73\x74\x6f\x72\x65' }
+});
+if (_0xed66.length > 0x00) {
+_0x0d7d.setPipeline(familyLinePipeline);
+for (const _0x0332 of _0xed66) {
+_0x0d7d.setBindGroup(0x00, _0x0332.bindGroup);
+_0x0d7d.setVertexBuffer(0x00, _0x0332.vertexBuf);
+_0x0d7d.draw(_0x0332.numPoints);
+}
+}
+_0x0d7d.setPipeline(linePipeline); _0x0d7d.setBindGroup(0x00, orbitBG); _0x0d7d.setVertexBuffer(0x00, pointBuf); _0x0d7d.draw(_0x9f56);
+_0x0d7d.setPipeline(spherePipeline);
+_0x0d7d.setBindGroup(0x00, earthBG); _0x0d7d.setVertexBuffer(0x00, earthGeo.vb); _0x0d7d.setVertexBuffer(0x01, earthGeo.ub); _0x0d7d.setIndexBuffer(earthGeo.ib, '\x75\x69\x6e\x74\x33\x32'); _0x0d7d.drawIndexed(earthGeo.count);
+_0x0d7d.setBindGroup(0x00, moonBG); _0x0d7d.setVertexBuffer(0x00, moonGeo.vb); _0x0d7d.setVertexBuffer(0x01, moonGeo.ub); _0x0d7d.setIndexBuffer(moonGeo.ib, '\x75\x69\x6e\x74\x33\x32'); _0x0d7d.drawIndexed(moonGeo.count);
+_0x0d7d.end();
+device.queue.submit([_0xc3ad.finish()]);
+needsRender = false;
+}
+requestAnimationFrame(_0x9362);
+}
+_0x5534();
+</script>
+</body>
+</html>
